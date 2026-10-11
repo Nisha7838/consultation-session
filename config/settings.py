@@ -99,4 +99,6 @@ REST_FRAMEWORK = {
 # Minimum wallet balance to start a session = MIN_START_MINUTES x per-minute cost.
 SESSION_MIN_START_MINUTES = 5
 # Shared secret the mock payment gateway sends in the X-Webhook-Secret header.
-RECHARGE_WEBHOOK_SECRET = os.environ.get("RECHARGE_WEBHOOK_SECRET", "dev-webhook-secret")
+RECHARGE_WEBHOOK_SECRET = os.environ.get(
+    "RECHARGE_WEBHOOK_SECRET", "dev-webhook-secret"
+)
