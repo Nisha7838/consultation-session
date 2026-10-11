@@ -1,14 +1,3 @@
-"""The session lifecycle, declared as a single transition table.
-
-    unassigned --assign--> assigned --accept--> accepted_by_provider --start--> in_progress --end--> completed
-         ^                    |
-         +------reject--------+
-    cancel: unassigned | assigned | accepted_by_provider --> cancelled
-
-`end` covers the user ending, the provider ending, and the system ending the
-session for insufficient balance; who ended it is stored in `ended_by`.
-"""
-
 from core.exceptions import InvalidTransition
 
 from .models import SessionStatus as S
@@ -51,4 +40,8 @@ def apply(session, action: str) -> None:
 
 
 def allowed_actions(status: str) -> list[str]:
-    return [action for action, (allowed_from, _) in TRANSITIONS.items() if status in allowed_from]
+    return [
+        action
+        for action, (allowed_from, _) in TRANSITIONS.items()
+        if status in allowed_from
+    ]

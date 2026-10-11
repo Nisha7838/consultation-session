@@ -1,23 +1,15 @@
-"""Session lifecycle and per-minute billing.
-
-Billing model
--------------
-* A session is billed in arrears for each *completed* minute:
-      due_minutes = floor((now - started_at) / 60s)
-  Minutes 1..billed_minutes are already paid; a billing run charges only
-  minutes billed_minutes+1 .. due_minutes. Re-running billing for the same
-  minute therefore charges nothing (plus a unique ledger reference per minute).
-* After billing, if the wallet cannot cover the *next* minute, the system ends
-  the session (ended_by=system, reason=insufficient_balance). The wallet never
-  goes negative.
-* A trailing partial minute at the moment the session ends is not charged.
-"""
-
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from core.exceptions import ActiveSessionExists, DomainError, InsufficientBalance, InvalidTransition, NotAllowed, NotFound
+from core.exceptions import (
+    ActiveSessionExists,
+    DomainError,
+    InsufficientBalance,
+    InvalidTransition,
+    NotAllowed,
+    NotFound,
+)
 from wallet import services as wallet_services
 
 from . import state_machine as sm
@@ -55,9 +47,13 @@ def assign_session(session_id, actor, provider) -> ConsultationSession:
     session = _lock_session(session_id)
     _ensure_is_session_user(session, actor)
     if not provider.is_provider:
-        raise DomainError("The assignee must be a PROVIDER account.", code="invalid_provider")
+        raise DomainError(
+            "The assignee must be a PROVIDER account.", code="invalid_provider"
+        )
     if not provider.per_minute_rate or provider.per_minute_rate <= 0:
-        raise DomainError("The provider has no valid per-minute rate.", code="invalid_provider")
+        raise DomainError(
+            "The provider has no valid per-minute rate.", code="invalid_provider"
+        )
     sm.apply(session, sm.ASSIGN)
     session.provider = provider
     session.save()
@@ -96,7 +92,9 @@ def start_session(session_id, actor, now=None) -> ConsultationSession:
     wallet = wallet_services.get_locked_wallet(session.user_id)
 
     if (
-        ConsultationSession.objects.filter(user_id=session.user_id, status=SessionStatus.IN_PROGRESS)
+        ConsultationSession.objects.filter(
+            user_id=session.user_id, status=SessionStatus.IN_PROGRESS
+        )
         .exclude(pk=session.pk)
         .exists()
     ):
@@ -163,7 +161,9 @@ def bill_session(session_id, now=None) -> ConsultationSession:
     now = now or timezone.now()
     session = _lock_session(session_id)
     if session.status != SessionStatus.IN_PROGRESS:
-        raise InvalidTransition(f"Only in-progress sessions can be billed; this session is '{session.status}'.")
+        raise InvalidTransition(
+            f"Only in-progress sessions can be billed; this session is '{session.status}'."
+        )
 
     wallet = wallet_services.get_locked_wallet(session.user_id)
     paid_all_due = _charge_due_minutes(session, wallet, now)
@@ -220,7 +220,9 @@ def cancel_session(session_id, actor) -> ConsultationSession:
 def bill_all_active_sessions(now=None) -> list[ConsultationSession]:
     """Bill every in-progress session; intended to be run every minute (cron / scheduler)."""
     now = now or timezone.now()
-    ids = ConsultationSession.objects.filter(status=SessionStatus.IN_PROGRESS).values_list("pk", flat=True)
+    ids = ConsultationSession.objects.filter(
+        status=SessionStatus.IN_PROGRESS
+    ).values_list("pk", flat=True)
     billed = []
     for session_id in list(ids):
         try:
