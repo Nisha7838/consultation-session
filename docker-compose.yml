@@ -1,0 +1,45 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: wallet_billing
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d wallet_billing"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  web:
+    build: .
+    image: wallet-billing:latest
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    environment: &app_env
+      DB_ENGINE: postgres
+      DB_NAME: wallet_billing
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: db
+      DB_PORT: "5432"
+      DJANGO_DEBUG: "0"
+      DJANGO_SECRET_KEY: change-me-in-production
+      RECHARGE_WEBHOOK_SECRET: dev-webhook-secret
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Periodic billing tick: bills every in-progress session once a minute.
+  billing:
+    image: wallet-billing:latest
+    environment: *app_env
+    command: ["sh", "-c", "sleep 10; while true; do python manage.py bill_active_sessions; sleep 60; done"]
+    depends_on:
+      web:
+        condition: service_started
+
+volumes:
+  pgdata:

@@ -30,6 +30,23 @@ export DB_ENGINE=postgres DB_NAME=wallet_billing DB_USER=postgres DB_PASSWORD=..
 python manage.py migrate
 ```
 
+### With Docker (PostgreSQL + API + billing worker)
+
+```bash
+docker compose up --build          # API on http://127.0.0.1:8000
+WEB_PORT=8001 docker compose up    # use another host port if 8000 is taken
+docker compose run --rm web python manage.py test   # run the tests against PostgreSQL
+docker compose down -v             # stop and delete the database volume
+```
+
+`docker compose up` starts three services:
+
+- `db`: PostgreSQL 17
+- `web`: runs migrations, then serves the API with gunicorn
+- `billing`: runs `bill_active_sessions` every 60 seconds, so in-progress sessions are billed and auto-ended without manual calls
+
+To build only the image: `docker build -t wallet-billing .`
+
 | Env var | Default | Purpose |
 |---|---|---|
 | `RECHARGE_WEBHOOK_SECRET` | `dev-webhook-secret` | Shared secret the mock gateway sends as `X-Webhook-Secret` |
