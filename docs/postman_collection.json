@@ -1,0 +1,223 @@
+{
+  "info": {
+    "name": "Wallet Session Billing",
+    "description": "Run requests top to bottom. Tokens, recharge reference, provider id and session id are saved automatically into collection variables.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base", "value": "http://127.0.0.1:8000/api" },
+    { "key": "webhook_secret", "value": "dev-webhook-secret" },
+    { "key": "suffix", "value": "" },
+    { "key": "user_token", "value": "" },
+    { "key": "provider_token", "value": "" },
+    { "key": "provider_id", "value": "" },
+    { "key": "recharge_ref", "value": "" },
+    { "key": "session_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Register USER",
+      "event": [
+        { "listen": "prerequest", "script": { "exec": ["pm.collectionVariables.set('suffix', Date.now());"] } },
+        { "listen": "test", "script": { "exec": ["pm.collectionVariables.set('user_token', pm.response.json().token);"] } }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base}}/auth/register/",
+        "body": { "mode": "raw", "raw": "{\"username\": \"alice{{suffix}}\", \"password\": \"pass12345\", \"role\": \"USER\"}" }
+      }
+    },
+    {
+      "name": "2. Register PROVIDER",
+      "event": [
+        { "listen": "test", "script": { "exec": [
+          "const j = pm.response.json();",
+          "pm.collectionVariables.set('provider_token', j.token);",
+          "pm.collectionVariables.set('provider_id', j.user.id);"
+        ] } }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base}}/auth/register/",
+        "body": { "mode": "raw", "raw": "{\"username\": \"drbob{{suffix}}\", \"password\": \"pass12345\", \"role\": \"PROVIDER\", \"per_minute_rate\": \"50\"}" }
+      }
+    },
+    {
+      "name": "3. Login (get token)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base}}/auth/token/",
+        "body": { "mode": "raw", "raw": "{\"username\": \"alice{{suffix}}\", \"password\": \"pass12345\"}" }
+      }
+    },
+    {
+      "name": "4. Me",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Token {{user_token}}" }],
+        "url": "{{base}}/auth/me/"
+      }
+    },
+    {
+      "name": "5. Wallet balance",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Token {{user_token}}" }],
+        "url": "{{base}}/wallet/"
+      }
+    },
+    {
+      "name": "6. Initiate recharge",
+      "event": [
+        { "listen": "test", "script": { "exec": ["pm.collectionVariables.set('recharge_ref', pm.response.json().reference);"] } }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Token {{user_token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{base}}/wallet/recharges/",
+        "body": { "mode": "raw", "raw": "{\"amount\": \"1000\"}" }
+      }
+    },
+    {
+      "name": "7. Recharge callback (send twice to test idempotency)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "X-Webhook-Secret", "value": "{{webhook_secret}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{base}}/wallet/recharges/callback/",
+        "body": { "mode": "raw", "raw": "{\"reference\": \"{{recharge_ref}}\", \"status\": \"success\"}" }
+      }
+    },
+    {
+      "name": "8. List recharges",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Token {{user_token}}" }],
+        "url": "{{base}}/wallet/recharges/"
+      }
+    },
+    {
+      "name": "9. Create session (with provider)",
+      "event": [
+        { "listen": "test", "script": { "exec": ["pm.collectionVariables.set('session_id', pm.response.json().id);"] } }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Token {{user_token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{base}}/sessions/",
+        "body": { "mode": "raw", "raw": "{\"provider_id\": {{provider_id}}}" }
+      }
+    },
+    {
+      "name": "10. End before start (expect 400)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Token {{user_token}}" }],
+        "url": "{{base}}/sessions/{{session_id}}/end/"
+      }
+    },
+    {
+      "name": "11. Provider accepts",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Token {{provider_token}}" }],
+        "url": "{{base}}/sessions/{{session_id}}/accept/"
+      }
+    },
+    {
+      "name": "12. User starts",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Token {{user_token}}" }],
+        "url": "{{base}}/sessions/{{session_id}}/start/"
+      }
+    },
+    {
+      "name": "13. Bill (run after each minute)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Token {{user_token}}" }],
+        "url": "{{base}}/sessions/{{session_id}}/bill/"
+      }
+    },
+    {
+      "name": "14. Session detail",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Token {{user_token}}" }],
+        "url": "{{base}}/sessions/{{session_id}}/"
+      }
+    },
+    {
+      "name": "15. User ends",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Token {{user_token}}" }],
+        "url": "{{base}}/sessions/{{session_id}}/end/"
+      }
+    },
+    {
+      "name": "16. Provider ends (alternative to 15)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Token {{provider_token}}" }],
+        "url": "{{base}}/sessions/{{session_id}}/end/"
+      }
+    },
+    {
+      "name": "17. Wallet ledger",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Token {{user_token}}" }],
+        "url": "{{base}}/wallet/transactions/"
+      }
+    },
+    {
+      "name": "18. List my sessions",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Token {{user_token}}" }],
+        "url": "{{base}}/sessions/"
+      }
+    },
+    {
+      "name": "Extra: Assign provider",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Token {{user_token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{base}}/sessions/{{session_id}}/assign/",
+        "body": { "mode": "raw", "raw": "{\"provider_id\": {{provider_id}}}" }
+      }
+    },
+    {
+      "name": "Extra: Provider rejects",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Token {{provider_token}}" }],
+        "url": "{{base}}/sessions/{{session_id}}/reject/"
+      }
+    },
+    {
+      "name": "Extra: Cancel (before start)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Token {{user_token}}" }],
+        "url": "{{base}}/sessions/{{session_id}}/cancel/"
+      }
+    }
+  ]
+}

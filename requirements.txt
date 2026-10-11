@@ -1,0 +1,4 @@
+Django>=5.2,<7
+djangorestframework>=3.15
+# Only needed when DB_ENGINE=postgres
+# psycopg[binary]>=3.2
